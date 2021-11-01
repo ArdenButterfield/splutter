@@ -144,11 +144,6 @@ void PitchDelayAudioProcessor::prepareToPlay (double sampleRate, int samplesPerB
     
     delay_samples = lfo_rate->a_param;
     buffer_write_pos = delay_samples;
-    
-    
-    for (int i = 0; i < NUM_PARAMETERS; i++) {
-        params[i]->prev_val = params[i]->curr_val;
-    }
 }
 
 void PitchDelayAudioProcessor::releaseResources()
@@ -194,7 +189,10 @@ void PitchDelayAudioProcessor::calculateParameters()
     dry_wet->a_param = *(dry_wet->u_param);
     pitch_shift->a_param = semitones_to_ratio(*(pitch_shift->u_param)) - 1;
     lfo_rate->a_param = *(lfo_rate->u_param) * fs;
-    // std::cout << "pitch shift ratio: "<<  pitch_shift->a_param << "\n";
+
+    for (int i = 0; i < NUM_PARAMETERS; ++i) {
+            params[i]->curr_val = params[i]->a_param;
+        }
 }
 
 float PitchDelayAudioProcessor::getInBetween(float* buffer, float index)
