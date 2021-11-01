@@ -101,7 +101,12 @@ private:
     float semitones_to_ratio(float interval);
     void resizeBuffer();
     void calculateParameters();
-    float getInBetween(float* buffer, float index);
+    float getInBetween(const float* buffer, const float index);
+    float linInterpolation(float start, float end, float fract);
+    float getWetSaw(const float d_samp, const float r_ptr, const float* delay_channel);
+    float getWetSine(float d_samp, float lo, float hi, const float* delay_channel);
+    int ctr; // TODO: temp test variable
+    bool sine_mode;
     
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PitchDelayAudioProcessor)

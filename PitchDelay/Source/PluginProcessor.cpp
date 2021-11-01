@@ -55,6 +55,10 @@ PitchDelayAudioProcessor::PitchDelayAudioProcessor()
     }
     
     delay_buffer = juce::AudioBuffer<float>();
+    
+    sine_mode = false;
+    
+    ctr = 0;
 }
 
 PitchDelayAudioProcessor::~PitchDelayAudioProcessor()
@@ -191,16 +195,62 @@ void PitchDelayAudioProcessor::calculateParameters()
     lfo_rate->a_param = *(lfo_rate->u_param) * fs;
 
     for (int i = 0; i < NUM_PARAMETERS; ++i) {
-            params[i]->curr_val = params[i]->a_param;
-        }
+        params[i]->curr_val = params[i]->a_param;
+    }
 }
 
-float PitchDelayAudioProcessor::getInBetween(float* buffer, float index)
+float PitchDelayAudioProcessor::getInBetween(const float* buffer, const float index)
 {
     // Currently linear interpolation, maybe i should do more.
     int lower_index = index;
     float offset = index - lower_index;
     return buffer[lower_index] * (1 - offset) + (offset) * buffer[lower_index + 1];
+}
+
+
+float PitchDelayAudioProcessor::linInterpolation(const float start, const float end, const float fract)
+{
+    return start + (fract * (end - start));
+}
+
+float PitchDelayAudioProcessor::getWetSaw(const float d_samp, const float r_ptr, const float* delay_channel)
+{
+    float wet, smelsh, smoosh;
+    if (d_samp < smoothing_window) {
+        smelsh = r_ptr - lfo_rate->a_param;
+        if (smelsh < 0) {
+            smelsh += buffer_length;
+        }
+        smoosh = ((float) d_samp) / smoothing_window;
+        // The read pointer jumps in position when d_samp gets to zero,
+        // wheter d_samp is increasing or decreasing. So, the closer
+        // we are to zero, the more we want the smelshed sound instead
+        // of the original sound.
+        wet = getInBetween(delay_channel, r_ptr) * (smoosh) + getInBetween(delay_channel, smelsh) * (1 - smoosh);
+    } else {
+        wet = getInBetween(delay_channel, r_ptr);
+    }
+    return wet;
+}
+
+float PitchDelayAudioProcessor::getWetSine(float d_samp, float lo, float hi, const float* delay_channel) {
+    // TODO: make this not be broken
+    if (lo == hi) {
+        return getInBetween(delay_channel, lo);
+    }
+    if (lo > hi) {
+        lo -= buffer_length;
+    }
+    float phase = 2 * PI * (d_samp - lo) / (hi - lo);
+    float amp = (hi - lo) / 2;
+    float center = (hi + lo) / 2;
+    float index = sin(phase) * amp + center;
+    if (index < 0) {
+        index += buffer_length;
+    }
+    // std::cout << "offset " << hi - index << " index: " << index << "\n";
+    return getInBetween(delay_channel, index);
+    
 }
 
 void PitchDelayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
@@ -227,39 +277,42 @@ void PitchDelayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     // the samples and the outer loop is handling the channels.
     // Alternatively, you can process the samples with the channels
     // interleaved by keeping the same state.
+    float fract;
     long w_ptr;
-    float dry, wet, out, in, smoosh, r_ptr, d_samp, smelsh;
+    int c;
+    float dry, wet, out, in, r_ptr, d_samp;
     for (int channel = 0; channel < fmin(NUM_CHANNELS, totalNumInputChannels); ++channel)
     {
         float* delay_channel = delay_buffer.getWritePointer(channel);
         
         w_ptr = buffer_write_pos;
         d_samp = delay_samples;
+        c = ctr;
         
         auto* channelData = buffer.getWritePointer (channel);
         
         for (int sample = 0; sample < numSamples; ++sample) {
+            c++;
+            fract = ((float) sample / (float) numSamples);
+            for (int i = 0; i < NUM_PARAMETERS; ++i) {
+                if (params[i]->curr_val != params[i]->prev_val) {
+                    params[i]->a_param = linInterpolation(params[i]->prev_val, params[i]->curr_val, fract);
+                }
+            }
+
+            
             r_ptr = w_ptr - d_samp;
             if (r_ptr < 0) {
                 r_ptr += buffer_length;
             }
             in = channelData[sample];
-            if (d_samp < smoothing_window) {
-                smelsh = r_ptr - lfo_rate->a_param;
-                if (smelsh < 0) {
-                    smelsh += buffer_length;
-                }
-                smoosh = ((float) d_samp) / smoothing_window;
-                // The read pointer jumps in position when d_samp gets to zero,
-                // wheter d_samp is increasing or decreasing. So, the closer
-                // we are to zero, the more we want the smelshed sound instead
-                // of the original sound.
-                wet = getInBetween(delay_channel, r_ptr) * (smoosh) + getInBetween(delay_channel, smelsh) * (1 - smoosh);
+            if (sine_mode) {
+                float min_delay = w_ptr;
+                float max_delay = w_ptr - lfo_rate->a_param;
+                
+                wet = getWetSine(d_samp, max_delay, min_delay, delay_channel);
             } else {
-                wet = getInBetween(delay_channel, r_ptr);
-                if (channel == 0) {
-                    std::cout << r_ptr << " r ptr\n";
-                }
+                wet = getWetSaw(d_samp, r_ptr, delay_channel);
             }
             dry = in;
             out = wet * (dry_wet->a_param) + dry * (1 - dry_wet->a_param);
@@ -267,6 +320,8 @@ void PitchDelayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             
             channelData[sample] = out;
             
+            // every sample, the write position in the delay array steps forward one,
+            // and the 
             w_ptr += 1;
             d_samp -= pitch_shift->a_param;
             if (w_ptr >= buffer_length) {
@@ -274,11 +329,19 @@ void PitchDelayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             }
             if (d_samp < 0) {
                 d_samp = lfo_rate->a_param;
+                std::cout << "ctr: " << c << "\n";
+                c = 0;
             } else if (d_samp > lfo_rate->a_param) {
                 d_samp = 0;
+                std::cout << "ctr: " << c << "\n";
+                c = 0;
             }
         }
+        for (int i = 0; i < NUM_PARAMETERS; ++i) {
+            params[i]->prev_val = params[i]->curr_val;
+        }
     }
+    ctr = c;
     buffer_read_pos = r_ptr;
     buffer_write_pos = w_ptr;
     delay_samples = d_samp;
