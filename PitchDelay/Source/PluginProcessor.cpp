@@ -56,7 +56,7 @@ PitchDelayAudioProcessor::PitchDelayAudioProcessor()
     
     delay_buffer = juce::AudioBuffer<float>();
     
-    sine_mode = false;
+    sine_mode = true;
     
     ctr = 0;
 }
@@ -191,9 +191,18 @@ void PitchDelayAudioProcessor::calculateParameters()
 {
     feedback_level->a_param = *(feedback_level->u_param);
     dry_wet->a_param = *(dry_wet->u_param);
-    pitch_shift->a_param = semitones_to_ratio(*(pitch_shift->u_param)) - 1;
-    lfo_rate->a_param = *(lfo_rate->u_param) * fs;
-
+    
+    // TODO: make this not broken
+    
+    float time_per_cycle = *(lfo_rate->u_param) * fs;
+    float d_samp_step = semitones_to_ratio(*(pitch_shift->u_param));
+    
+    // distance that d_samp will travel in one cycle.
+    // (sample time / cycle) * (distance / sample time ) = (distance / cycle)
+    lfo_rate->a_param = time_per_cycle * d_samp_step;
+    
+    // We also need to account for the write pointer moving by 1 each sample.
+    pitch_shift->a_param = 1 - d_samp_step;
     for (int i = 0; i < NUM_PARAMETERS; ++i) {
         params[i]->curr_val = params[i]->a_param;
     }
@@ -323,7 +332,7 @@ void PitchDelayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             // every sample, the write position in the delay array steps forward one,
             // and the 
             w_ptr += 1;
-            d_samp -= pitch_shift->a_param;
+            d_samp += pitch_shift->a_param;
             if (w_ptr >= buffer_length) {
                 w_ptr = 0;
             }
