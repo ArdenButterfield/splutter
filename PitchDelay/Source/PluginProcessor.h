@@ -16,10 +16,11 @@
 #define PI 3.14159265
 #define NUM_PARAMETERS 4
 #define NUM_CHANNELS 2
+#define GET_IN_RANGE(sample) (sample += (sample < 0) ? buffer_length : 0)
 
 const float max_lfo_rate = 10.0;
 const float max_pitch_shift = 4.0 * 12.0;
-const float smoothing_window = 1000.0;
+const float smoothing_window = 1000;
 // over how many samples do we fade from the near to the far sound on
 // the sawtooth delay?
 
@@ -95,17 +96,19 @@ private:
     float buffer_read_pos;
     long buffer_write_pos;
     float delay_samples;
+    int samples_since_reset;
     
     int buffer_length;
+    float max_delay;
     
     float semitones_to_ratio(float interval);
     void resizeBuffer();
     void calculateParameters();
     float getInBetween(const float* buffer, const float index);
     float linInterpolation(float start, float end, float fract);
-    float getWetSaw(const float d_samp, const float r_ptr, const float* delay_channel);
+    float getWetSaw(const int s, const float w_ptr, const float* delay_channel);
     float getWetSine(float d_samp, float lo, float hi, const float* delay_channel);
-    int ctr; // TODO: temp test variable
+    // TODO: temp test variable
     bool sine_mode;
     
     //==============================================================================
