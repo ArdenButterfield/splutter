@@ -199,8 +199,14 @@ void PitchDelayAudioProcessor::calculateParameters()
     
     // how much will the read pointer move per sample?
     pitch_shift->a_param = semitones_to_ratio(*(pitch_shift->u_param));
-    max_delay = abs(pitch_shift->a_param) * lfo_rate->a_param;
     
+    // max delay: maximum number of samples between read pointer and write pointer
+    if (pitch_shift->a_param == 1) {
+        // no pitch up or down.
+        max_delay = lfo_rate->a_param;
+    } else {
+        max_delay = abs(pitch_shift->a_param - 1) * lfo_rate->a_param;
+    }
     for (int i = 0; i < NUM_PARAMETERS; ++i) {
         params[i]->curr_val = params[i]->a_param;
     }
@@ -225,44 +231,46 @@ float PitchDelayAudioProcessor::getWetSaw(const int s, const float w_ptr, const 
     float r_ptr;
     if (pitch_shift->a_param < 1) {
         r_ptr = w_ptr + ((float)s) * (pitch_shift->a_param - 1);
+    } else if (pitch_shift->a_param > 1) {
+        // we need to buffer the read pointer away from the write pointer by the smoothing window,
+        // so that the secondary read pointer in the smoothing window doesn't go past the write pointer
+        r_ptr = w_ptr - max_delay + ((float)s) * (pitch_shift->a_param - 1) - (float)smoothing_window;
     } else {
-        r_ptr = w_ptr - max_delay + ((float)s) * (pitch_shift->a_param - 1);
+        r_ptr = w_ptr - max_delay;
     }
     if (r_ptr < 0) {
         r_ptr += buffer_length;
     }
-    if (s < smoothing_window + 1) {
-        //
-    }
     if (s < smoothing_window) {
-        float secondary_r_ptr = r_ptr - max_delay;
+        // For the smallest values of s, we use a "smoothing window": we calculate the values from
+        // where the read pointer would be if it had continued its trajectory, and fade from the old
+        // values to the new values.
+        float secondary_r_ptr;
+        
+        
+        float r_scale = (pitch_shift->a_param == 0) ? 1 : ((float)s) / (float)smoothing_window;
+        float secondary_scale = (pitch_shift->a_param == 0) ? 0 : 1 - r_scale;
+        
+        if (pitch_shift->a_param < 1) {
+            // Pitch down means we are increasing the distance between the read and write pointers
+            // as s increases, so when we jump s back to 0, the old values will be farther away from
+            // the new values by the max delay amount.
+            secondary_r_ptr = r_ptr - max_delay;
+
+            
+        } else if (pitch_shift->a_param > 1) {
+            // vice versa from above
+            secondary_r_ptr = r_ptr + max_delay;
+        } else {
+            // special case for no pitch shift
+            secondary_r_ptr = 0.0;
+        }
         if (secondary_r_ptr < 0) {
             secondary_r_ptr += buffer_length;
         }
-        float r_scale, secondary_scale;
-        if (pitch_shift->a_param < 1) {
-            // s is increasing, so if the pitch is shifting down,
-            // we are moving the r pointer away from the w pointer.
-            // this means that we need to fade in the new r_ptr, and
-            // fade out the old secondary_r_ptr as s increases.
-            r_scale = ((float)s) / 1000.0;
-            secondary_scale = 1.0 - r_scale;
-            
-        } else if (pitch_shift->a_param > 1) {
-            // vice versa from above.
-            secondary_scale = ((float)s) / 1000.0;
-            r_scale = 1.0 - secondary_scale;
-        } else {
-            // On the off chance that we are within the smoothing window, but with no pitch shift,
-            // in which case we won't need to do any smoothing. I don't think this is possible.
-            r_scale = 1.0;
-            secondary_scale = 0.0;
-        }
-        std::cout<<r_ptr<<" at "<<r_scale<<", "<<secondary_r_ptr<<" at "<<secondary_scale<<"\n";
         return r_scale * getInBetween(delay_channel, r_ptr) +
             secondary_scale * getInBetween(delay_channel, secondary_r_ptr);
     } else {
-        std::cout << r_ptr <<"\n";
         return getInBetween(delay_channel, r_ptr);
     }
 }
@@ -338,6 +346,7 @@ void PitchDelayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             in = channelData[sample];
             
             wet = getWetSaw(s, w_ptr, delay_channel);
+            std::cout << "wet: "<<wet<<"\n";
             dry = in;
             out = wet * (dry_wet->a_param) + dry * (1 - dry_wet->a_param);
             delay_channel[w_ptr] = wet * feedback_level->a_param + in;
