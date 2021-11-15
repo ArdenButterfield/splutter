@@ -191,9 +191,7 @@ void PitchDelayAudioProcessor::calculateParameters()
 {
     feedback_level->a_param = *(feedback_level->u_param);
     dry_wet->a_param = *(dry_wet->u_param);
-    
-    // TODO: make this not broken
-    
+        
     // lfo rate a param: number of samples per saw
     lfo_rate->a_param = *(lfo_rate->u_param) * fs;
     
@@ -325,7 +323,6 @@ void PitchDelayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     float dry, wet, out, in, d_samp;
     for (int channel = 0; channel < fmin(NUM_CHANNELS, totalNumInputChannels); ++channel)
     {
-        std::cout<<"switching to channel"<<channel<<"\n";
         float* delay_channel = delay_buffer.getWritePointer(channel);
         
         w_ptr = buffer_write_pos;
@@ -346,7 +343,6 @@ void PitchDelayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             in = channelData[sample];
             
             wet = getWetSaw(s, w_ptr, delay_channel);
-            std::cout << "wet: "<<wet<<"\n";
             dry = in;
             out = wet * (dry_wet->a_param) + dry * (1 - dry_wet->a_param);
             delay_channel[w_ptr] = wet * feedback_level->a_param + in;
@@ -370,7 +366,6 @@ void PitchDelayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     samples_since_reset = s;
     buffer_write_pos = w_ptr;
     delay_samples = d_samp;
-    //std::cout << "r: " << buffer_read_pos << " w: " << buffer_write_pos << " diff " << buffer_write_pos - buffer_read_pos << "\n";
 }
 
 //==============================================================================
