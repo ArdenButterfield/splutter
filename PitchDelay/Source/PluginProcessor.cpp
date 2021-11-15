@@ -55,9 +55,7 @@ PitchDelayAudioProcessor::PitchDelayAudioProcessor()
     }
     
     delay_buffer = juce::AudioBuffer<float>();
-    
-    sine_mode = false;
-    
+        
     ctr = 0;
 }
 
@@ -233,26 +231,6 @@ float PitchDelayAudioProcessor::getWetSaw(const float d_samp, const float r_ptr,
     return wet;
 }
 
-float PitchDelayAudioProcessor::getWetSine(float d_samp, float lo, float hi, const float* delay_channel) {
-    // TODO: make this not be broken
-    if (lo == hi) {
-        return getInBetween(delay_channel, lo);
-    }
-    if (lo > hi) {
-        lo -= buffer_length;
-    }
-    float phase = 2 * PI * (d_samp - lo) / (hi - lo);
-    float amp = (hi - lo) / 2;
-    float center = (hi + lo) / 2;
-    float index = sin(phase) * amp + center;
-    if (index < 0) {
-        index += buffer_length;
-    }
-    // std::cout << "offset " << hi - index << " index: " << index << "\n";
-    return getInBetween(delay_channel, index);
-    
-}
-
 void PitchDelayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
     calculateParameters();
@@ -306,14 +284,7 @@ void PitchDelayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                 r_ptr += buffer_length;
             }
             in = channelData[sample];
-            if (sine_mode) {
-                float min_delay = w_ptr;
-                float max_delay = w_ptr - lfo_rate->a_param;
-                
-                wet = getWetSine(d_samp, max_delay, min_delay, delay_channel);
-            } else {
-                wet = getWetSaw(d_samp, r_ptr, delay_channel);
-            }
+            wet = getWetSaw(d_samp, r_ptr, delay_channel);
             dry = in;
             out = wet * (dry_wet->a_param) + dry * (1 - dry_wet->a_param);
             delay_channel[w_ptr] = (getInBetween(delay_channel, r_ptr) * feedback_level->a_param) + in;
