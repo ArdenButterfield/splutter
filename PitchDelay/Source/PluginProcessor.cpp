@@ -192,6 +192,7 @@ void PitchDelayAudioProcessor::calculateParameters()
     dry_wet->a_param = *(dry_wet->u_param);
     read_ptr_step = semitones_to_ratio(*(pitch_shift->u_param));
     float samples_per_delay_cycle = *(lfo_rate->u_param) * (float)fs;
+    std::cout<<"samp per cycle: "<<samples_per_delay_cycle;
     if (read_ptr_step > 1.0) {
         max_delay = samples_per_delay_cycle * read_ptr_step - samples_per_delay_cycle;
     } else {
@@ -217,22 +218,25 @@ float PitchDelayAudioProcessor::linInterpolation(const float start, const float 
     return start + (fract * (end - start));
 }
 
-float PitchDelayAudioProcessor::getWetSaw(const float d_samp, const float r_ptr, const float* delay_channel)
+float PitchDelayAudioProcessor::getWetSaw(const float w_ptr, const float r_ptr, const float* delay_channel)
 {
     float wet, far_samp, near_samp_amount;
-    if (d_samp < smoothing_window) {
-        far_samp = r_ptr - lfo_rate->a_param;
+    if ((w_ptr - r_ptr) < smoothing_window) {
+        
+        far_samp = r_ptr - max_delay;
         if (far_samp < 0) {
             far_samp += buffer_length;
         }
-        near_samp_amount = ((float) d_samp) / smoothing_window;
+        near_samp_amount = (w_ptr - r_ptr) / smoothing_window;
         // The read pointer jumps in position when d_samp gets to zero,
         // wheter d_samp is increasing or decreasing. So, the closer
         // we are to zero, the more we want the smelshed sound instead
         // of the original sound.
         wet = getInBetween(delay_channel, r_ptr) * (near_samp_amount) + getInBetween(delay_channel, far_samp) * (1 - near_samp_amount);
+        //std::cout<<r_ptr<<" at "<<near_samp_amount<<"; "<<far_samp<<" at "<<(1 - near_samp_amount)<<"\n";
     } else {
         wet = getInBetween(delay_channel, r_ptr);
+        //std::cout<<r_ptr<<"\n";
     }
     return wet;
 }
@@ -266,6 +270,7 @@ void PitchDelayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     float dry, wet, out, in, r_ptr, d_samp;
     for (int channel = 0; channel < fmin(NUM_CHANNELS, totalNumInputChannels); ++channel)
     {
+        //std::cout << "switching to channel " << channel <<"\n";
         float* delay_channel = delay_buffer.getWritePointer(channel);
         
         w_ptr = buffer_write_pos;
@@ -285,7 +290,8 @@ void PitchDelayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             }
             
             in = channelData[sample];
-            wet = getWetSaw(d_samp, r_ptr, delay_channel);
+            //std::cout<<"w: "<<w_ptr<<" r: ";
+            wet = getWetSaw(w_ptr, r_ptr, delay_channel);
             dry = in;
             out = wet * (dry_wet->a_param) + dry * (1 - dry_wet->a_param);
             delay_channel[w_ptr] = (getInBetween(delay_channel, r_ptr) * feedback_level->a_param) + in;
@@ -299,6 +305,14 @@ void PitchDelayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             if (w_ptr >= buffer_length) {
                 w_ptr = 0;
             }
+            if (r_ptr >= buffer_length) {
+                r_ptr -= buffer_length;
+            }
+            bool wraparound = (r_ptr > w_ptr + 100);
+            // Wraparound: the w pointer has moved back, but the r pointer has not yet.
+            if (wraparound) {
+                r_ptr -= buffer_length;
+            }
             if (r_ptr >= w_ptr) {
                 r_ptr -= max_delay;
                 std::cout << "ctr: " << c << "\n";
@@ -308,7 +322,7 @@ void PitchDelayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                 std::cout << "ctr: " << c << "\n";
                 c = 0;
             }
-            if (r_ptr < 0) {
+            if (wraparound or r_ptr < 0) {
                 r_ptr += buffer_length;
             }
         }

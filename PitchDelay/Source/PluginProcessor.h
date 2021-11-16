@@ -107,7 +107,7 @@ private:
     void calculateParameters();
     float getInBetween(const float* buffer, const float index);
     float linInterpolation(float start, float end, float fract);
-    float getWetSaw(const float d_samp, const float r_ptr, const float* delay_channel);
+    float getWetSaw(const float w_ptr, const float r_ptr, const float* delay_channel);
     int ctr; // TODO: temp test variable
 
     
