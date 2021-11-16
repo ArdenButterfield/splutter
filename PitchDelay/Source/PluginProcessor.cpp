@@ -22,10 +22,10 @@ PitchDelayAudioProcessor::PitchDelayAudioProcessor()
                        )
 #endif
 {
-    feedback_level = new parameter_vals;
-    dry_wet = new parameter_vals;
-    pitch_shift = new parameter_vals;
-    lfo_rate = new parameter_vals;
+    feedback_level = new ParameterVals;
+    dry_wet = new ParameterVals;
+    pitch_shift = new ParameterVals;
+    lfo_rate = new ParameterVals;
     
     feedback_level->name = "feedback";
     dry_wet->name = "dry/wet";
@@ -146,6 +146,7 @@ void PitchDelayAudioProcessor::prepareToPlay (double sampleRate, int samplesPerB
     
     delay_samples = lfo_rate->a_param;
     buffer_write_pos = delay_samples;
+    buffer_read_pos = (float)(buffer_write_pos - lfo_rate->a_param);
 }
 
 void PitchDelayAudioProcessor::releaseResources()
@@ -189,8 +190,13 @@ void PitchDelayAudioProcessor::calculateParameters()
 {
     feedback_level->a_param = *(feedback_level->u_param);
     dry_wet->a_param = *(dry_wet->u_param);
-    pitch_shift->a_param = semitones_to_ratio(*(pitch_shift->u_param)) - 1;
-    lfo_rate->a_param = *(lfo_rate->u_param) * fs;
+    read_ptr_step = semitones_to_ratio(*(pitch_shift->u_param));
+    float samples_per_delay_cycle = *(lfo_rate->u_param) * (float)fs;
+    if (read_ptr_step > 1.0) {
+        max_delay = samples_per_delay_cycle * read_ptr_step - samples_per_delay_cycle;
+    } else {
+        max_delay = samples_per_delay_cycle - samples_per_delay_cycle * read_ptr_step;
+    }
 
     for (int i = 0; i < NUM_PARAMETERS; ++i) {
         params[i]->curr_val = params[i]->a_param;
@@ -213,18 +219,18 @@ float PitchDelayAudioProcessor::linInterpolation(const float start, const float 
 
 float PitchDelayAudioProcessor::getWetSaw(const float d_samp, const float r_ptr, const float* delay_channel)
 {
-    float wet, smelsh, smoosh;
+    float wet, far_samp, near_samp_amount;
     if (d_samp < smoothing_window) {
-        smelsh = r_ptr - lfo_rate->a_param;
-        if (smelsh < 0) {
-            smelsh += buffer_length;
+        far_samp = r_ptr - lfo_rate->a_param;
+        if (far_samp < 0) {
+            far_samp += buffer_length;
         }
-        smoosh = ((float) d_samp) / smoothing_window;
+        near_samp_amount = ((float) d_samp) / smoothing_window;
         // The read pointer jumps in position when d_samp gets to zero,
         // wheter d_samp is increasing or decreasing. So, the closer
         // we are to zero, the more we want the smelshed sound instead
         // of the original sound.
-        wet = getInBetween(delay_channel, r_ptr) * (smoosh) + getInBetween(delay_channel, smelsh) * (1 - smoosh);
+        wet = getInBetween(delay_channel, r_ptr) * (near_samp_amount) + getInBetween(delay_channel, far_samp) * (1 - near_samp_amount);
     } else {
         wet = getInBetween(delay_channel, r_ptr);
     }
@@ -256,14 +262,14 @@ void PitchDelayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     // Alternatively, you can process the samples with the channels
     // interleaved by keeping the same state.
     float fract;
-    long w_ptr;
-    int c;
+    int c, w_ptr;
     float dry, wet, out, in, r_ptr, d_samp;
     for (int channel = 0; channel < fmin(NUM_CHANNELS, totalNumInputChannels); ++channel)
     {
         float* delay_channel = delay_buffer.getWritePointer(channel);
         
         w_ptr = buffer_write_pos;
+        r_ptr = buffer_read_pos;
         d_samp = delay_samples;
         c = ctr;
         
@@ -277,12 +283,7 @@ void PitchDelayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                     params[i]->a_param = linInterpolation(params[i]->prev_val, params[i]->curr_val, fract);
                 }
             }
-
             
-            r_ptr = w_ptr - d_samp;
-            if (r_ptr < 0) {
-                r_ptr += buffer_length;
-            }
             in = channelData[sample];
             wet = getWetSaw(d_samp, r_ptr, delay_channel);
             dry = in;
@@ -294,18 +295,21 @@ void PitchDelayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             // every sample, the write position in the delay array steps forward one,
             // and the 
             w_ptr += 1;
-            d_samp -= pitch_shift->a_param;
+            r_ptr += read_ptr_step;
             if (w_ptr >= buffer_length) {
                 w_ptr = 0;
             }
-            if (d_samp < 0) {
-                d_samp = lfo_rate->a_param;
+            if (r_ptr >= w_ptr) {
+                r_ptr -= max_delay;
                 std::cout << "ctr: " << c << "\n";
                 c = 0;
-            } else if (d_samp > lfo_rate->a_param) {
-                d_samp = 0;
+            } else if (r_ptr < w_ptr - max_delay) {
+                r_ptr += max_delay;
                 std::cout << "ctr: " << c << "\n";
                 c = 0;
+            }
+            if (r_ptr < 0) {
+                r_ptr += buffer_length;
             }
         }
         for (int i = 0; i < NUM_PARAMETERS; ++i) {

@@ -23,13 +23,14 @@ const float smoothing_window = 1000.0;
 // over how many samples do we fade from the near to the far sound on
 // the sawtooth delay?
 
-struct parameter_vals {
+struct ParameterVals {
     juce::AudioParameterFloat* u_param;
     float a_param;
     
     // Interpolation parameters
     float curr_val;
     float prev_val;
+    ParameterVals(): a_param(0), curr_val(0), prev_val(0) {}
     int param_code;
     std::string name;
 };
@@ -81,22 +82,25 @@ public:
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
-    parameter_vals* feedback_level;
-    parameter_vals* dry_wet;
-    parameter_vals* pitch_shift;
-    parameter_vals* lfo_rate;
+    ParameterVals* feedback_level;
+    ParameterVals* dry_wet;
+    ParameterVals* pitch_shift;
+    ParameterVals* lfo_rate;
     
-    parameter_vals* params[NUM_PARAMETERS];
+    ParameterVals* params[NUM_PARAMETERS];
     
     
 private:
     int fs; // Sample frequency
     juce::AudioBuffer<float> delay_buffer;
     float buffer_read_pos;
-    long buffer_write_pos;
+    int buffer_write_pos;
     float delay_samples;
     
     int buffer_length;
+    
+    float read_ptr_step;
+    float max_delay;
     
     float semitones_to_ratio(float interval);
     void resizeBuffer();
