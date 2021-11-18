@@ -20,7 +20,7 @@
 
 const float max_lfo_rate = 10.0;
 const float max_pitch_shift = 4.0 * 12.0;
-const float smoothing_window = 1000;
+const int smoothing_window = 1000;
 // over how many samples do we fade from the near to the far sound on
 // the sawtooth delay?
 
@@ -99,7 +99,15 @@ private:
     int samples_since_reset;
     
     int buffer_length;
+    
+    float write_step;
+    float lfo_len;
     float max_delay;
+    
+    float old_write_step;
+    float old_lfo_len;
+    float old_max_delay;
+    
     
     float semitones_to_ratio(float interval);
     void resizeBuffer();
@@ -108,6 +116,7 @@ private:
     float linInterpolation(float start, float end, float fract);
     float getWetSaw(const int s, const float w_ptr, const float* delay_channel);
     float getWetSine(float d_samp, float lo, float hi, const float* delay_channel);
+    float getRPointer(int s, float w_ptr, float step, float max, bool is_secondary);
     // TODO: temp test variable
     bool sine_mode;
     
