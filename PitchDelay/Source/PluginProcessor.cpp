@@ -232,7 +232,7 @@ float PitchDelayAudioProcessor::getRPointer(int s, float w_ptr, float step, floa
 {
     float secondary_shift;
     if (is_secondary) {
-        secondary_shift = max_delay;
+        secondary_shift = max;
     } else {
         secondary_shift = 0;
     }
@@ -242,9 +242,9 @@ float PitchDelayAudioProcessor::getRPointer(int s, float w_ptr, float step, floa
     } else if (step > 0) {
         // we need to buffer the read pointer away from the write pointer by the smoothing window,
         // so that the secondary read pointer in the smoothing window doesn't go past the write pointer
-        r_ptr = w_ptr - max_delay + ((float)s) * step - smoothing_window - secondary_shift;
+        r_ptr = w_ptr - max + ((float)s) * step - smoothing_window - secondary_shift;
     } else {
-        r_ptr = w_ptr - max_delay; // No secondary shift for constant delay.
+        r_ptr = w_ptr - max; // No secongit adary shift for constant delay.
     }
     return r_ptr;
 }
@@ -326,8 +326,14 @@ void PitchDelayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     float dry, wet, out, in, d_samp;
     // TODO: make the new/old paramenters work correctly with 2 channels, test it.
     // We are almost there!
+    float oll = old_lfo_len;
+    float omd = old_max_delay;
+    float ows = old_write_step;
     for (int channel = 0; channel < fmin(NUM_CHANNELS, totalNumInputChannels); ++channel)
     {
+        old_lfo_len = oll;
+        old_max_delay = omd;
+        old_write_step = ows;
         float* delay_channel = delay_buffer.getWritePointer(channel);
         
         w_ptr = buffer_write_pos;
