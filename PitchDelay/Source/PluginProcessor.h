@@ -9,12 +9,14 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "filterCalc/FilterCalc.h"
+#include "stk-filters/BiQuad.h"
 #include <math.h> // pow
 #include <algorithm> // min, max
 #include <iostream>
 
 #define PI 3.14159265
-#define NUM_PARAMETERS 4
+#define NUM_PARAMETERS 7
 #define NUM_CHANNELS 2
 #define GET_IN_RANGE(sample) (sample += (sample < 0) ? buffer_length : 0)
 
@@ -24,7 +26,7 @@ const int smoothing_window = 1000;
 // over how many samples do we fade from the near to the far sound on
 // the sawtooth delay?
 
-struct parameter_vals {
+struct ParameterVals {
     juce::AudioParameterFloat* u_param;
     float a_param;
     
@@ -33,6 +35,8 @@ struct parameter_vals {
     float prev_val;
     int param_code;
     std::string name;
+    
+    ParameterVals(): a_param(0), curr_val(0), prev_val(0) {}
 };
 
 
@@ -82,12 +86,15 @@ public:
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
-    parameter_vals* feedback_level;
-    parameter_vals* dry_wet;
-    parameter_vals* pitch_shift;
-    parameter_vals* lfo_rate;
+    ParameterVals* feedback_level;
+    ParameterVals* dry_wet;
+    ParameterVals* pitch_shift;
+    ParameterVals* lfo_rate;
+    ParameterVals* min_delay;
+    ParameterVals* lo_cut;
+    ParameterVals* hi_cut;
     
-    parameter_vals* params[NUM_PARAMETERS];
+    ParameterVals* params[NUM_PARAMETERS];
     
     
 private:
@@ -108,6 +115,8 @@ private:
     float old_lfo_len;
     float old_max_delay;
     
+    float lo_freq, hi_freq;
+    stk::BiQuad filter_lo_L, filter_lo_R, filter_hi_L, filter_hi_R;
     
     float semitones_to_ratio(float interval);
     void resizeBuffer();
@@ -115,10 +124,7 @@ private:
     float getInBetween(const float* buffer, const float index);
     float linInterpolation(float start, float end, float fract);
     float getWetSaw(const int s, const float w_ptr, const float* delay_channel);
-    float getWetSine(float d_samp, float lo, float hi, const float* delay_channel);
     float getRPointer(int s, float w_ptr, float step, float max, bool is_secondary);
-    // TODO: temp test variable
-    bool sine_mode;
     
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PitchDelayAudioProcessor)

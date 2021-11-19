@@ -38,7 +38,9 @@ private:
     juce::Slider dry_wet;
     juce::Slider pitch_shift;
     juce::Slider lfo_rate;
-    // juce::ToggleButton sine_saw;
+    juce::Slider min_delay;
+    juce::Slider lo_cut;
+    juce::Slider hi_cut;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PitchDelayAudioProcessorEditor)
 };
