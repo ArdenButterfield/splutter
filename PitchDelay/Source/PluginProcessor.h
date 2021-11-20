@@ -6,6 +6,11 @@
   ==============================================================================
 */
 
+
+/*
+ 
+ */
+
 #pragma once
 
 #include <JuceHeader.h>
@@ -14,6 +19,7 @@
 #include <math.h> // pow
 #include <algorithm> // min, max
 #include <iostream>
+#include <stdlib.h> // abs
 
 #define PI 3.14159265
 #define NUM_PARAMETERS 7
@@ -118,7 +124,10 @@ private:
     float old_max_delay;
     
     float min_delay_actual;
-    float min_delay_actual_step;
+    float min_delay_step;
+    const float time_for_delay_move = 0.5; // seconds
+    float samps_for_delay_move;
+    
     
     float lo_freq, hi_freq;
     stk::BiQuad filter_lo_L, filter_lo_R, filter_hi_L, filter_hi_R;
@@ -130,6 +139,7 @@ private:
     float linInterpolation(float start, float end, float fract);
     float getWetSaw(const int s, const float w_ptr, const float* delay_channel);
     float getRPointer(int s, float w_ptr, float step, float max, bool is_secondary);
+    void adjustMinDelayActual();
     
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PitchDelayAudioProcessor)

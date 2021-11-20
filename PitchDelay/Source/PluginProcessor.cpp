@@ -155,13 +155,19 @@ void PitchDelayAudioProcessor::prepareToPlay (double sampleRate, int samplesPerB
     // Use this method as the place to do any pre-playback
     // initialisation that you need..
     fs = sampleRate;
+    samps_for_delay_move = fs * time_for_delay_move;
+    min_delay->a_param = *(min_delay->u_param) * fs;
+    min_delay_actual = min_delay->a_param;
     
     calculateParameters();
+
+    
     old_max_delay = max_delay;
     old_write_step = write_step;
     old_lfo_len = lfo_len;
     resizeBuffer();
     delay_buffer.clear();
+    
     
     
     delay_samples = lfo_rate->a_param;
@@ -215,6 +221,10 @@ void PitchDelayAudioProcessor::calculateParameters()
     lfo_len = lfo_rate->a_param;
     
     min_delay->a_param = *(min_delay->u_param) * fs;
+    if (min_delay_actual != min_delay->a_param) {
+        float distance = min_delay->a_param - min_delay_actual;
+        min_delay_step = distance / samps_for_delay_move;
+    }
     
     // how much will the read pointer move per sample?
     pitch_shift->a_param = semitones_to_ratio(*(pitch_shift->u_param));
@@ -232,7 +242,7 @@ void PitchDelayAudioProcessor::calculateParameters()
     
     float coeffs[5];
     float fc = *(lo_cut->u_param);
-    float Q = 1.0; // TODO: try different Q vals?
+    float Q = 1.0;
     FilterCalc::calcCoeffsHPF(coeffs, fc, Q, fs);
     filter_lo_L.setCoefficients(coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4]);
     filter_lo_R.setCoefficients(coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4]);
@@ -267,13 +277,13 @@ float PitchDelayAudioProcessor::getRPointer(int s, float w_ptr, float step, floa
     }
     float r_ptr;
     if (step < 0) {
-        r_ptr = w_ptr + ((float)s) * step - secondary_shift - min_delay->a_param;
+        r_ptr = w_ptr + ((float)s) * step - secondary_shift - min_delay_actual;
     } else if (step > 0) {
         // we need to buffer the read pointer away from the write pointer by the smoothing window,
         // so that the secondary read pointer in the smoothing window doesn't go past the write pointer
-        r_ptr = w_ptr - max + ((float)s) * step - smoothing_window + secondary_shift - min_delay->a_param;
+        r_ptr = w_ptr - max + ((float)s) * step - smoothing_window + secondary_shift - min_delay_actual;
     } else {
-        r_ptr = w_ptr - min_delay->a_param; // No secondary shift for constant delay.
+        r_ptr = w_ptr - min_delay_actual; // No secondary shift for constant delay.
     }
     return r_ptr;
 }
@@ -314,6 +324,14 @@ float PitchDelayAudioProcessor::getWetSaw(const int s, const float w_ptr, const 
     }
 }
 
+void PitchDelayAudioProcessor::adjustMinDelayActual() {
+    if (abs(min_delay_actual - min_delay->a_param) < abs(min_delay_step)) {
+        min_delay_actual = min_delay->a_param;
+    } else {
+        min_delay_actual += min_delay_step;
+    }
+}
+
 void PitchDelayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
     calculateParameters();
@@ -346,8 +364,10 @@ void PitchDelayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     float oll = old_lfo_len;
     float omd = old_max_delay;
     float ows = old_write_step;
+    float mda = min_delay_actual;
     for (int channel = 0; channel < fmin(NUM_CHANNELS, totalNumInputChannels); ++channel)
     {
+        min_delay_actual = mda;
         old_lfo_len = oll;
         old_max_delay = omd;
         old_write_step = ows;
@@ -402,6 +422,7 @@ void PitchDelayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             if (s >= old_lfo_len) {
                 s = 0;
             }
+            adjustMinDelayActual();
         }
         for (int i = 0; i < NUM_PARAMETERS; ++i) {
             params[i]->prev_val = params[i]->curr_val;
