@@ -54,7 +54,7 @@ PitchDelayAudioProcessor::PitchDelayAudioProcessor()
     auto dry_wet_range = juce::NormalisableRange<float> (0.0f, 1.0f);
     auto pitch_shift_range = juce::NormalisableRange<float> (-max_pitch_shift, max_pitch_shift);
     auto lfo_range = juce::NormalisableRange<float> (0.025f, max_lfo_rate);
-    auto min_delay_range = juce::NormalisableRange<float> (0.0, 2.0);
+    auto min_delay_range = juce::NormalisableRange<float> (0.0, max_delay_slider_val);
     auto lo_filter_range = juce::NormalisableRange<float> (10.0, 2000.0);
     auto hi_filter_range = juce::NormalisableRange<float> (200.0, 20000.0);
     
@@ -145,7 +145,8 @@ void PitchDelayAudioProcessor::changeProgramName (int index, const juce::String&
 
 void PitchDelayAudioProcessor::resizeBuffer()
 {
-    buffer_length = (int)(semitones_to_ratio(max_pitch_shift) * fs * max_lfo_rate);
+    buffer_length = (int)(semitones_to_ratio(max_pitch_shift) * (fs * max_lfo_rate + smoothing_window) + max_delay_slider_val * fs);
+    std::cout<<"buffer length: "<<buffer_length<<"\n";
     delay_buffer.setSize(NUM_CHANNELS, buffer_length, true, true, true);
 }
 

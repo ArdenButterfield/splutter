@@ -10,6 +10,8 @@
 
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
+#include "BinaryData.h"
+#include "slider_gui.h"
 
 //==============================================================================
 /**
@@ -30,8 +32,11 @@ public:
 private:
     // This reference is provided as a quick way for your editor to
     // access the processor object that created it.
-    const int window_width = 800;
-    const int window_height = 500;
+    const int window_width = 640;
+    const int window_height = 400;
+    
+    juce::Image background;
+    SliderLookFeel sliderLookFeel;
     
     PitchDelayAudioProcessor& audioProcessor;
     juce::Slider feedback_level;
