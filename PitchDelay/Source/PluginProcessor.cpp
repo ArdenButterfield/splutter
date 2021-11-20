@@ -218,24 +218,31 @@ void PitchDelayAudioProcessor::calculateParameters()
         
     // lfo rate a param: number of samples per saw
     lfo_rate->a_param = *(lfo_rate->u_param) * fs;
-    lfo_len = lfo_rate->a_param;
     
+    // how much will the read pointer move per sample?
+    pitch_shift->a_param = semitones_to_ratio(*(pitch_shift->u_param));
+
     min_delay->a_param = *(min_delay->u_param) * fs;
     if (min_delay_actual != min_delay->a_param) {
         float distance = min_delay->a_param - min_delay_actual;
         min_delay_step = distance / samps_for_delay_move;
     }
     
-    // how much will the read pointer move per sample?
-    pitch_shift->a_param = semitones_to_ratio(*(pitch_shift->u_param));
-    write_step = pitch_shift->a_param - 1;
-    // max delay: maximum number of samples between read pointer and write pointer
-    if (pitch_shift->a_param == 1) {
-        // no pitch up or down.
-        max_delay = lfo_rate->a_param;
-    } else {
-        max_delay = abs(pitch_shift->a_param - 1) * lfo_rate->a_param;
+    // We don't want to change the shape of the sawtooth while we are in the
+    // middle of transitioning, that will cause clicking.
+    std::cout << samples_since_reset<<" samples since reset ";
+    if (samples_since_reset > 1000 || samples_since_reset == 0) {
+        lfo_len = lfo_rate->a_param;
+        write_step = pitch_shift->a_param - 1;
+        // max delay: maximum number of samples between read pointer and write pointer
+        if (pitch_shift->a_param == 1) {
+            // no pitch up or down.
+            max_delay = lfo_rate->a_param;
+        } else {
+            max_delay = abs(pitch_shift->a_param - 1) * lfo_rate->a_param;
+        }
     }
+    std::cout<<write_step<<" "<<lfo_len<<"\n";
     for (int i = 0; i < NUM_PARAMETERS; ++i) {
         params[i]->curr_val = params[i]->a_param;
     }
@@ -290,9 +297,6 @@ float PitchDelayAudioProcessor::getRPointer(int s, float w_ptr, float step, floa
 
 float PitchDelayAudioProcessor::getWetSaw(const int s, const float w_ptr, const float* delay_channel)
 {
-    if (s == 47992) {
-        ;
-    }
     float r_ptr, secondary_r_ptr;
     if (s > smoothing_window || (write_step == 0 && old_write_step == 0)) {
         r_ptr = getRPointer(s, w_ptr, old_write_step, old_max_delay, false);
@@ -360,7 +364,6 @@ void PitchDelayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     long w_ptr;
     int s;
     float dry, wet, out, in, d_samp;
-    // We are almost there!
     float oll = old_lfo_len;
     float omd = old_max_delay;
     float ows = old_write_step;
